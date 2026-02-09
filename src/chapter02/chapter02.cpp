@@ -620,7 +620,7 @@ public:
         uint64_t occupied = black | white | holes;
         uint64_t bb = player == BLACK ? black : white;
 
-        // Version 1: generic loop (commented out, kept for reference)
+        // Version 1: generic loop
         // while (bb) {
         //     Square from = pop_lsb(bb);
         //     uint64_t b = moves_bb(from, occupied) & ~occupied;
