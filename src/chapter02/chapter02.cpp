@@ -301,7 +301,7 @@ Square pop_lsb(uint64_t& b) {
 }
 
 // Computes the Manhattan distance (|rank1 - rank2| + |file1 - file2|)
-int manhattan_distance(Square sq1, Square sq2) {
+constexpr int manhattan_distance(Square sq1, Square sq2) {
     int d_rank = abs(rank_of(sq1) - rank_of(sq2));
     int d_file = abs(file_of(sq1) - file_of(sq2));
     return d_rank + d_file;
