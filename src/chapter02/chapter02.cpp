@@ -388,10 +388,77 @@ uint64_t moves_bb(Square sq, uint64_t occupied) {
     return orthogonalMagics[sq].moves[idx_omoves] | diagonalMagics[sq].moves[idx_dmoves];
 }
 
-// Initializes magic bitboard tables for a given move type (orthogonal 
-// or diagonal). For each square, enumerates all possible occupancy 
-// patterns using the Carry-Rippler trick, computes the corresponding 
-// reachable squares, and stores them in the lookup table indexed by 
+// Finds the magic constant and shift value for a given square and
+// move type. Enumerates all occupancy patterns using the
+// Carry-Rippler trick, then searches for a magic number that
+// produces a perfect hash (no collisions) for all patterns. Returns
+// the number of relevant bits (k) and the magic constant
+pair<int, uint64_t> magic_for_square(MoveType mt, Square sq) {
+    uint64_t edges = ((Rank1BB | Rank8BB) & ~rank_bb(sq)) |
+                        ((FileABB | FileHBB) & ~file_bb(sq));
+    uint64_t moves_bb = reachable_squares(mt, sq, 0) & ~edges;
+    vector<uint64_t> occupancies;
+    vector<uint64_t> possible_moves;
+    uint64_t b = 0;
+    int size = 0;
+    do {
+        occupancies.push_back(b);
+        possible_moves.push_back(reachable_squares(mt, sq, b));
+        size++;
+        b = (b - moves_bb) & moves_bb;
+    } while (b);
+    int k = popcount(moves_bb);
+    int shift = 64 - k;
+    random_device rd;
+    mt19937_64 twister(rd());
+    uniform_int_distribution<uint64_t> d;
+    vector<uint32_t> seen(1 << k);
+    vector<uint64_t> moves(1 << k);
+    for (uint32_t cnt = 0;; cnt++) {
+        uint64_t magic = d(twister) & d(twister) & d(twister);
+        bool found = true;
+        for (size_t j = 0; j < occupancies.size(); j++) {
+            uint64_t occ = occupancies[j];
+            uint32_t index = magic * occ >> shift;
+            if (seen[index]==cnt && moves[index]!=possible_moves[j])
+            {
+                found = false;
+                break;
+            }
+            seen[index] = cnt;
+            moves[index] = possible_moves[j];
+        }
+        if (found) {
+            return {k, magic};
+        }
+    }
+    unreachable();
+}
+
+// Standalone program to find and print all magic constants for both
+// orthogonal and diagonal move types across all 64 squares
+//
+// int main() {
+//   for (MoveType mt : {ORTHOGONAL, DIAGONAL}) {
+//     stringstream ss_k, ss_magic;
+//     ss_k << format("int {}_K[64] = {{",
+//                     mt == ORTHOGONAL ? "H" : "D");
+//     ss_magic << format("uint64_t {}_MAGIC[64] = {{",
+//                         mt == ORTHOGONAL ? "H" : "D");
+//     for (int sq = SQ_A1; sq <= SQ_H8; sq++) {
+//       const auto [k, magic] = magic_for_square(mt, Square(sq));
+//       ss_k << dec << k << ',';
+//       ss_magic << showbase << hex << magic << ',';
+//     }
+//     cout << ss_k.str() << "};\n";
+//     cout << ss_magic.str() << "};\n\n";
+//   }
+// }
+
+// Initializes magic bitboard tables for a given move type (orthogonal
+// or diagonal). For each square, enumerates all possible occupancy
+// patterns using the Carry-Rippler trick, computes the corresponding
+// reachable squares, and stores them in the lookup table indexed by
 // the magic hash
 void init_magics(MoveType mt, uint64_t table[], Magic magics[]) {
     static constexpr uint64_t O_MAGIC[64] = {
@@ -485,7 +552,7 @@ class Move {
 public:
     constexpr Move() = default;
     constexpr explicit Move(uint16_t d) : data(d) {}
-    constexpr explicit Move(Square from, Square to)
+    constexpr Move(Square from, Square to)
         : data((to << 6) + from) {}
     constexpr Square from_sq() const {
         return Square(data & 0x3F);
